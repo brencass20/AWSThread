@@ -4,7 +4,6 @@ import cgi
 import cgitb
 cgitb.enable(display=0, logdir="/var/log/httpd/cgi_err/")
 
-host="cloudcomputingproject2.c6aekzpgvzxl.us-east-1.rds.amazonaws.com"
 def write_html():
         form = cgi.FieldStorage()
         print("""<html>
