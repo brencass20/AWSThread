@@ -1,93 +1,136 @@
-#! /usr/bin/env python3
-
-#Much of this file is adapted from list.py provided by Russ Lewis on
-# https://github.com/russ-lewis/ttt_-_python_cgi/list.py
-
-import cgi
-
-#Enable debugging.  Python docs recommend for testing. Should not be left enabled.
-#import cgitb
-#cgit.enable(display=0, logdir="/var/log/httpd/cgi_err/")
+"""
+Project 3: CSC 346, adapting the "Threads" application we had first created
+to use Flask and then add images to a database.
+"""
 
 import MySQLdb
-import private_passwords as PP
-
-#The following function handles the processing of the actual test of the HTML File.
-#It writes everything from the HTML header to the content to the closing tabs at the bottom.
-host=PP.DB_HOST
-user=PP.DB_USER
-password=PP.DB_PASSWORD
-db=PP.DB_DATABASE
-def wrtie_html():
-        # See https://docs.python.org/3.4/library/cgi.html
-        form = cgi.FieldStorage()
-
-        print("""<html>
-<head><title> Brendan and Corey PostThread Project 2</title></head>
-<body>
-
-<h2> Brendan and Corey PostThread - Project 2</h2>
-""", end="")
-        print("""<p>
-<font size="+1"><b>This is a simple feed that allows users to post threads, comment on these threads, and like those threads they like the most.  Those with the most likes will be ordered to the top of the thread.</b></font>
-""", end="")
-        write_create_thread_form()
-
-        #Call DB and iterate through threads and comments.
-        conn=MySQLdb.connect(host=host,user=user,passwd=password,db=db)
-        cursor=conn.cursor()
-        cursor.execute("SELECT * FROM threads WHERE threadId IS NOT NULL;")
-        allposts=[]
-        for row in cursor.fetchall():
-                id = int(row[0])
-                post = row[1]
-                author = row[2]
-                likes = int(row[3])
-
-                allposts.append({"id":id, "post":post, "author":author, "likes":likes})
-        cursor.close()
-
-        write_posts(allposts)
-        print("""</body></html>""", end="")
+import private_no_share_dangerous_passwords as pnsdp
+import secrets
+import json
+import random
+import requests
+import time
+from flask import Flask, request, render_template, url_for, redirect, make_response, g
+app = Flask(__name__)
 
 
-def write_create_thread_form():
-        print("""<p><b> Create new thread</b>
+def get_db():
+	#The DB is storest in the application contect.
+	my.db = conn.MySQLdb.connect(host=pnsdp.DB_HOST,user=pnsdp.DB_USER,passwd=pnsdp.DB_PASSWORD, db=pnsdp.DB_DATABASE)
+	return my.db
 
-<form action="create_thread.py" method="post">
-<input type=submit value="Create">
-</form>
+def execute_sql_insert(database, sql, val):
+	cursor=database.cursor()
+	if Val == None:
+		cursor.execute(sql)
+	else:
+		cursor.execute(sql, val)
+	database.commit()
+	cursor.close()
+	database.close()
 
-""", end="")
+def execute_sql_select(database, sql):
+	cursor=database.cursor()
+	allSelects = cursor.execute(sql).fetchall()
+	cursor.close()
+	database.close()
+	return allSelects
+
+	
+@app.route('/', methods=['GET','POST'])
+def index():
+	if "userName" in request.form.keys():
+		#Create the form before loading the page
+		userName = request.form["userName"]
+		postString = request.form["postString"]
+		id = random.randint(0,10000)
+		sql = """INSERT INTO threads (threadId, threadContent, threadAuthor, threadLikes) VALUES (%s,%s, %s, %s)"""
+		val = (id, postString, userName, 0)
+		execute_sql_insert(get_db(), sql, val)
+		
+	sql = """SELECT * FROM threads WHERE threadId IS NOT NULL;"""
+	sqlTot = execute_sql_select(get_db(),sql)
+	totList = []
+	for row in sqlTot:
+		id=int(row[0])
+		post=row[1]
+		author=row[2]
+		likes=int(row[3])
+		lineString={"id":id,"likes":likes,"author":author,"message":post}
+		totList.append(lineString)
+	
+	'''TESTING LOCALLY: 
+	totList=[]
+	likes=1
+	post="TestMessage"
+	author="Brendan"
+	id=-1
+	lineString={"id":id,"likes":likes,"author":author,"message":post}
+	totList.append(lineString)
+	totList.append(lineString)'''
+	return render_template("index.html", totStr="",list=totList)
+
+@app.route('/thread', methods=['GET','POST'])
+def thread():
+	if "userName" in request.form.keys():
+		#Add the comment to the DB then load the rest of page
+		#Get the data from form
+		userName = request.form["userName"]
+		postString = request.form["postString"]
+		threadid = request.form["id"]
+		commentID = random.randint(1,10000)
+		sql = """INSERT INTO comments (threadId,commentID, commentContent, commentAuthor, commentLikes) VALUES (%s,%s,%s,%s,%s)""" % (threadid,commentID,postString,userName,0)
+		val = (threadID, commentID, postString, userName, 0)
+		execute_sql_insert(get_db(), sql, val)
+		
+	
+	#All the code to generate the comments, and message  for a specific thread
+	threadid = request.form["id"]
+	sql = """SELECT * FROM comments WHERE threadId=%s;""" % (threadid)
+	sqlTot = execute_sql_select(get_db(),sql)
+	totList = []
+	for row in sqlTot:
+		commentId=row[1]
+		comment=row[2]
+		author=row[3]
+		likes=int(row[4])
+		lineString={"threadid":id,"likes":likes,"author":author,"comment":comment,"commentid":commentId}
+		totList.append(lineString)
+	''' TESTING LOCALLY:
+	totList=[]
+	likes=1
+	comment="TestMessage"
+	author="Brendan"
+	threadid=-1
+	commentid=1
+	lineString={"threadid":id,"likes":likes,"author":author,"comment":comment,"commentid":commentid}
+	totList.append(lineString)'''
+	
+	return render_template("thread.html", msg="This is the thread",listcomment=list,threadid=threadid)
+
+@app.route("/createthread", methods=['GET','POST'])
+def create_thread():
+	return render_template("create_thread.html")
+
+@app.route("/createcomment", methods=['GET','POST'])
+def create_comment():
+	return render_template("create_comment.html",threadid=request.form["id"])
 
 
-def write_posts(allposts):
-        print("""<p>
-<font size="+1"><b> POSTS </b></font>
-        <br><table border = 1>
-                <tr> <td><b>Likes</b></td> <td><b>Message</b></td> <td><b>Author</b></td> <td><b>Comment</b></td> <td><b>Upvote</b></td> </tr>""", end="")
+#Updates database and then redirects to the original Page.
+@app.route('/upvote_thread', methods=["GET","POST"])
+def upvote_thread():
+	id=request.form["id"]	#Need to get the id num from form.
+	sql = """UPDATE threads SET threadLikes = threadLikes + 1 WHERE threadId=%s""" % id
+	execute_sql_insert(get_db(), sql, None)
+	return redirect(url_for("index"), code =303)
 
-        for p in allposts:
-                id = p["id"]
-                post=p["post"]
-                author=p["author"]
-                likes=p["likes"]
-                mark = "</b></font>"
-                totStr= """     <td>%s%d</td> <td>%s</td>  <td>%s</td> <td><a href="comment.py?id=%d">%s</a></td>""" % (mark, likes, post, author, id, author)
+@app.route('/upvote_comment', methods=["GET","POST"])
+def upvote_comment():
+	id=request.form["id"]	#need to get the id from form.
+	sql ="""UPDATE comments  SET commentLikes = commentLikes + 1 WHERE commentID=%s""" % id
+	execute_sql_insert(get_db(), sql, None)
+	return redirect(url_for("thread"), 303)
 
-                #form action for each button
-                print("""
-                <tr>
-                %s <td><a href="upvotethread.py?id=%s">Upvote</a>
-                </tr>""" % (totStr, id), end="")
-        print("""       </table>
-
-""", end="")
-
-
-print("Content-Type: text/html;charset=utf-8")
-print()
-wrtie_html()
-
-    # see https://docs.python.org/3.4/library/cgi.html for the basic usage
-    # here.
+if __name__=='__main__':
+	app.run()
